@@ -6,7 +6,7 @@ import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
-import org.junit.Assert;
+import static org.junit.Assert.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import javax.security.auth.login.Configuration;
@@ -23,16 +23,16 @@ public class HelloWorldStepDefs {
     }
 
     @Then("status code is {int}")
-    public void status_code_is(Integer status) {
+    public void status_code_is(int status) {
 
-        assertThat(response.statusCode(),is(status));
+        assertEquals(status,response.statusCode());
 
     }
 
     @And("response body contains {string}")
     public void response_body_contains(String HelloWorld) {
 
-        assertThat(response.body().path("message"),is(HelloWorld));
+        assertEquals(HelloWorld,response.body().path("message"));
     }
 
 }
