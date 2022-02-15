@@ -7,6 +7,7 @@ import com.bookit.utilities.Environment;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
+import io.cucumber.java.en.When;
 import io.restassured.http.ContentType;
 import io.restassured.path.json.JsonPath;
 import io.restassured.response.Response;
@@ -29,6 +30,7 @@ public class ApiStepDefs {
       accessToken =  BookItApiUtil.getAccessToken(Environment.TEACHER_EMAIL,Environment.TEACHER_PASSWORD);
         System.out.println("Teacher email = " + Environment.TEACHER_EMAIL);
         System.out.println("Teacher password = " + Environment.TEACHER_PASSWORD);
+        System.out.println(accessToken);
     }
 
     @And("User sends request to {string}")
@@ -73,4 +75,26 @@ public class ApiStepDefs {
         assertEquals(apiUser.get("role"),selfPage.role.getText());
     }
 
+
+    @When("Users sends post request to {string} with following info:")
+    public void users_sends_post_request_to_with_following_info(String endPoint, Map<String,String> newStudentInfo) {
+
+     response =   given().accept(ContentType.JSON)
+               .and().header("Authorization",accessToken)
+                .and().queryParams(newStudentInfo).log().all()
+                .when().post(Environment.BASE_URL +"/"+ endPoint);
+
+        response.prettyPrint();
+    }
+
+    @And("User deletes previously created student")
+    public void userDeletesPreviouslyCreatedStudent() {
+
+        int studentId = response.path("entryiId");
+
+        given().accept(ContentType.JSON).log().all()
+                .when()
+                .and().header("Authorization",accessToken).when().delete(Environment.BASE_URL +"/api/students/"+studentId)
+                .then().assertThat().statusCode(204);
+    }
 }
