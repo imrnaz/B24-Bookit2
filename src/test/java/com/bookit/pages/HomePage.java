@@ -13,9 +13,13 @@ public class HomePage extends BasePage{
     @FindBy(linkText = "self")
     public WebElement self;
 
+    @FindBy(linkText = "hunt")
+    public WebElement hunt;
 
     public void gotoSelf(){
         BrowserUtils.hover(me);
         self.click();
     }
+
+
 }
