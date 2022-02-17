@@ -1,8 +1,9 @@
 package com.bookit.step_definitions;
 
+
 import com.bookit.pages.SelfPage;
 import com.bookit.utilities.BookItApiUtil;
-
+import com.bookit.utilities.DBUtils;
 import com.bookit.utilities.Environment;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
@@ -11,90 +12,147 @@ import io.cucumber.java.en.When;
 import io.restassured.http.ContentType;
 import io.restassured.path.json.JsonPath;
 import io.restassured.response.Response;
-import org.junit.Assert;
 
 import java.util.Map;
 
-import static org.junit.Assert.*;
-
 import static io.restassured.RestAssured.*;
+import static org.hamcrest.Matchers.*;
+import static org.hamcrest.MatcherAssert.*;
+
+import java.util.Map;
 
 public class ApiStepDefs {
 
     String accessToken;
     Response response;
+    Map<String,String> newRecordMap;
 
     @Given("User logged in BookIt api as teacher role")
-    public void user_logged_in_BookIt_api_as_teacher_role() {
-
-      accessToken =  BookItApiUtil.getAccessToken(Environment.TEACHER_EMAIL,Environment.TEACHER_PASSWORD);
+    public void user_logged_in_to_Bookit_api_as_teacher_role() {
+        accessToken = BookItApiUtil.getAccessToken(Environment.TEACHER_EMAIL, Environment.TEACHER_PASSWORD);
         System.out.println("Teacher email = " + Environment.TEACHER_EMAIL);
-        System.out.println("Teacher password = " + Environment.TEACHER_PASSWORD);
-        System.out.println(accessToken);
+        System.out.println("Teacher password = " +  Environment.TEACHER_PASSWORD);
     }
 
-    @And("User sends request to {string}")
-    public void user_sends_request_to(String path) {
-
-      response =  given().accept(ContentType.JSON)
-                .and().header("Authorization",accessToken)
+    @Given("User sends GET request to {string}")
+    public void user_sends_GET_request_to(String path) {
+        response = given().accept(ContentType.JSON)
+                .and().header("Authorization", accessToken)
                 .when().get(Environment.BASE_URL + path);
-
         System.out.println("API Endpoint = " + Environment.BASE_URL + path);
-
+        response.prettyPrint();
     }
 
     @Then("status code should be {int}")
     public void status_code_should_be(int expStatusCode) {
-
-       assertEquals(expStatusCode,response.statusCode());
+        assertThat(response.statusCode(), equalTo(expStatusCode));
     }
 
-    @And("content type is {string}")
-    public void content_type_is(String contentType) {
-
-        assertEquals(contentType,response.contentType());
+    @Then("content type is {string}")
+    public void content_type_is(String expContentType) {
+        assertThat(response.contentType(), equalTo(expContentType));
     }
 
-    @Then("role is {string}")
-    public void role_is(String role) {
-
-        Assert.assertEquals(role,response.path("role"));
+    @And("role is {string}")
+    public void roleIs(String expRole) {
+        JsonPath json = response.jsonPath();
+        System.out.println("role = " + json.getString("role"));
+        assertThat(json.getString("role") ,  is(expRole));
     }
+
+    /**
+     * {
+     *     "id": 11516,
+     *     "firstName": "Barbabas",
+     *     "lastName": "Lyst",
+     *     "role": "teacher"
+     * }
+     */
 
     @Then("User should see same info on UI and API")
     public void user_should_see_same_info_on_UI_and_API() {
+        //read values into a map from api
+        Map<String, Object> apiUserMap = response.body().as(Map.class);
+        String apiFullname = apiUserMap.get("firstName")+" "+apiUserMap.get("lastName");
+        System.out.println("apiFullname = " + apiFullname);
 
+        //read values from UI using POM
         SelfPage selfPage = new SelfPage();
+        String uiFullname = selfPage.fullName.getText();
+        String uiRole = selfPage.role.getText();
 
-        Map<String , String > apiUser = response.body().as(Map.class);
+        System.out.println("uiFullname = " + uiFullname);
 
-        System.out.println(apiUser);
-
-        assertEquals(apiUser.get("firstName"),selfPage.fullName.getText().split(" ")[0]);
-        assertEquals(apiUser.get("role"),selfPage.role.getText());
+        assertThat(uiFullname, equalTo(apiFullname));
+        assertThat(uiRole, equalTo(apiUserMap.get("role")));
     }
 
-
-    @When("Users sends post request to {string} with following info:")
-    public void users_sends_post_request_to_with_following_info(String endPoint, Map<String,String> newStudentInfo) {
-
-     response =   given().accept(ContentType.JSON)
-               .and().header("Authorization",accessToken)
-                .and().queryParams(newStudentInfo).log().all()
-                .when().post(Environment.BASE_URL +"/"+ endPoint);
-
+    @When("Users sends POST request to {string} with following info:")
+    public void usersSendsPOSTRequestToWithFollowingInfo(String endpoint, Map<String, String> newEntryInfo) {
+        newRecordMap = newEntryInfo; //assign the query map to newRecordMap
+        response = given().accept(ContentType.JSON)
+                .and().header("Authorization", accessToken)
+                .and().queryParams(newEntryInfo).log().all()
+                .when().post(Environment.BASE_URL + endpoint);
         response.prettyPrint();
     }
 
     @And("User deletes previously created student")
     public void userDeletesPreviouslyCreatedStudent() {
-
         int studentId = response.path("entryiId");
+        given().accept(ContentType.JSON).log().all()
+                .and().header("Authorization", accessToken)
+                .when().delete(Environment.BASE_URL+"/api/students/"+studentId)
+                .then().assertThat().statusCode(204);
+    }
+
+    @And("User sends GET request to {string} with {string}")
+    public void userSendsGETRequestToWith(String endpoint, String teamId) {
+        response = given().accept(ContentType.JSON)
+                .and().header("Authorization", accessToken)
+                .and().pathParam("id", teamId).log().all()
+                .when().get(Environment.BASE_URL + endpoint); //api/teams/11267
+    }
+
+    @And("Team name should be {string} in response")
+    public void teamNameShouldBeInResponse(String expTeamName) {
+        response.prettyPrint();
+        assertThat(response.path("name") , equalTo(expTeamName));
+    }
+
+    @And("Database query should have same {string} and {string}")
+    public void databaseQueryShouldHaveSameAnd(String teamId, String teamName) {
+        String sql = "SELECT id, name FROM team WHERE id = "+ teamId ;
+
+        Map<String, Object> dbTeamInfo = DBUtils.getRowMap(sql);
+        System.out.println("dbTeamInfo = " + dbTeamInfo);
+        assertThat(dbTeamInfo.get("id"), equalTo(Long.parseLong(teamId)));
+        assertThat(dbTeamInfo.get("name"), equalTo(teamName));
+    }
+
+    @And("Database should persist same team info")
+    public void databaseShouldPersistSameTeamInfo() {
+        int newTeamID = response.path("entryiId");
+        String sql = "SELECT * FROM team WHERE id = " + newTeamID;
+        Map<String, Object> dbNewTeamMap = DBUtils.getRowMap(sql);
+
+        System.out.println("sql = " + sql);
+        System.out.println("dbNewTeamMap = " + dbNewTeamMap);
+
+        assertThat(dbNewTeamMap.get("id"), equalTo((long)newTeamID));
+        assertThat(dbNewTeamMap.get("name"), equalTo(newRecordMap.get("team-name")));
+        assertThat(dbNewTeamMap.get("batch_number").toString(), equalTo(newRecordMap.get("batch-number")));
+    }
+
+    @And("User deletes previously created team")
+    public void userDeletesPreviouslyCreatedTeam() {
+
+        int entryId = response.jsonPath().getInt("entryiId");
 
         given().accept(ContentType.JSON).log().all()
-                .when()
-                .and().header("Authorization",accessToken).when().delete(Environment.BASE_URL +"/api/students/"+studentId)
-                .then().assertThat().statusCode(204);
+                .and().header("Authorization",accessToken)
+                .when().delete(Environment.BASE_URL + "/api/teams/"+entryId).then().assertThat().statusCode(200);
+
+
     }
 }
